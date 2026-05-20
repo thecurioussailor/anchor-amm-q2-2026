@@ -15,7 +15,7 @@ declare_id!("DJnx5rDpK9tyuCyRt3UtyHmz5o2mK1sTn72FvJPn7dsn");
 pub mod anchor_amm_q2_2026 {
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        initialize::handler(ctx)
+    pub fn initialize(ctx: Context<Initialize>, seed: u64, fee: u16, authority: Option<Pubkey>) -> Result<()> {
+        ctx.accounts.init(seed, fee, authority, ctx.bumps)
     }
 }
