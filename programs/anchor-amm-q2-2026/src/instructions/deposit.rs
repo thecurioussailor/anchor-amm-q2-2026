@@ -82,7 +82,7 @@ impl<'info> Deposit<'info> {
         max_y: u64, //maximum amount of token Y that the user is willing to deposit
     ) -> Result<()> {
 
-        require!(self.config.locked, AmmError::PoolLocked);
+        require!(!self.config.locked, AmmError::PoolLocked);
         require_neq!(amount, 0, AmmError::InvalidAmount);
 
         let (x, y) = 
