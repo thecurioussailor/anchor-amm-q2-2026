@@ -26,4 +26,8 @@ pub mod anchor_amm_q2_2026 {
     pub fn withdraw(ctx: Context<Withdraw>, amount: u64, min_x: u64, min_y: u64) -> Result<()>{
         ctx.accounts.withdraw(amount, min_x, min_y)
     }
+
+    pub fn swap(ctx: Context<Swap>, is_x: bool, amount_in: u64, min_amount_out: u64) -> Result<()> {
+        ctx.accounts.swap(is_x, amount_in, min_amount_out)
+    }
 }
