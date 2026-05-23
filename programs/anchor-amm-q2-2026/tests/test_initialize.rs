@@ -87,3 +87,14 @@ fn test_initialize() {
     let res = svm.send_transaction(tx);
     assert!(res.is_ok());
 }
+
+#[test]
+fn test_initialize() {
+    let (mut svm, payer, mint_x, mint_y, config, mint_lp, vault_x, vault_y) = setup();
+
+    let instruction = create_initialise_ix(
+        &mut svm, &payer, mint_x, mint_y, config, mint_lp, vault_x, vault_y,
+    );
+    let res = send(&mut svm, &[instruction], &payer, &[&payer]);
+    assert!(res.is_ok());
+}
