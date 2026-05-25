@@ -14,16 +14,16 @@ pub struct Deposit<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
-    pub mint_x: InterfaceAccount<'info, Mint>,
-    pub mint_y: InterfaceAccount<'info, Mint>,
+    pub mint_x: Box<InterfaceAccount<'info, Mint>>,
+    pub mint_y: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
         seeds = [b"lp", config.key().as_ref()],
         bump = config.lp_bump
     )]
-    pub mint_lp: InterfaceAccount<'info, Mint>,
-    
+    pub mint_lp: Box<InterfaceAccount<'info, Mint>>,
+
     #[account(
         has_one = mint_x,
         has_one = mint_y,
@@ -31,34 +31,34 @@ pub struct Deposit<'info> {
         bump = config.config_bump,
     )]
     pub config: Account<'info, Config>,
-    
+
     #[account(
         mut,
         associated_token::mint = mint_x,
         associated_token::authority = config,
     )]
-    pub vault_x: InterfaceAccount<'info, TokenAccount>,
+    pub vault_x: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
-        mut, 
+        mut,
         associated_token::mint = mint_y,
         associated_token::authority = config
     )]
-    pub vault_y: InterfaceAccount<'info, TokenAccount>,
+    pub vault_y: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         associated_token::mint = mint_x,
         associated_token::authority = user,
     )]
-    pub user_x: InterfaceAccount<'info, TokenAccount>,
+    pub user_x: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         associated_token::mint = mint_y,
         associated_token::authority = user,
     )]
-    pub user_y: InterfaceAccount<'info, TokenAccount>,
+    pub user_y: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         init_if_needed,
@@ -66,7 +66,7 @@ pub struct Deposit<'info> {
         associated_token::mint = mint_lp,
         associated_token::authority = user,
     )]
-    pub user_lp: InterfaceAccount<'info, TokenAccount>,
+    pub user_lp: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub token_program: Interface<'info, TokenInterface>,
 
