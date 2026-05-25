@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token::{burn, transfer, Burn, Mint, Token, TokenAccount, Transfer},
+    token_interface::{Mint, TokenAccount, TokenInterface, burn, transfer_checked, Burn, TransferChecked},
 };
 
 use constant_product_curve::ConstantProduct;
@@ -13,11 +13,9 @@ pub struct Withdraw<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
-    #[account(mut)]
-    pub mint_x: Box<Account<'info, Mint>>,
+    pub mint_x: Box<InterfaceAccount<'info, Mint>>,
 
-    #[account(mut)]
-    pub mint_y: Box<Account<'info, Mint>>,
+    pub mint_y: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         has_one = mint_x,
@@ -32,44 +30,44 @@ pub struct Withdraw<'info> {
         seeds = [b"lp", config.key().as_ref()],
         bump = config.lp_bump,
     )]
-    pub mint_lp: Box<Account<'info, Mint>>,
+    pub mint_lp: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
         associated_token::mint = mint_x,
         associated_token::authority = config,
     )]
-    pub vault_x: Box<Account<'info, TokenAccount>>,
+    pub vault_x: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         associated_token::mint = mint_y,
         associated_token::authority = config,
     )]
-    pub vault_y: Box<Account<'info, TokenAccount>>,
+    pub vault_y: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         associated_token::mint = mint_x,
         associated_token::authority = user,
     )]
-    pub user_x: Box<Account<'info, TokenAccount>>,
+    pub user_x: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         associated_token::mint = mint_y,
         associated_token::authority = user,
     )]
-    pub user_y: Box<Account<'info, TokenAccount>>,
+    pub user_y: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         associated_token::mint = mint_lp,
         associated_token::authority = user,
     )]
-    pub user_lp: Box<Account<'info, TokenAccount>>,
+    pub user_lp: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
 
     pub system_program: Program<'info, System>,
 
@@ -97,7 +95,7 @@ impl<'info> Withdraw<'info> {
                     amount,
                     6,
                 )
-                .unwrap();
+                .map_err(|_| AmmError::InvalidAmount)?;
                 (amounts.x, amounts.y)
             };
 
@@ -109,24 +107,19 @@ impl<'info> Withdraw<'info> {
     }
 
     pub fn withdraw_tokens(&self, is_x: bool, amount: u64) -> Result<()> {
-        let (from, to) = match is_x {
-            true => (
-                self.vault_x.to_account_info(),
-                self.user_x.to_account_info(),
-            ),
-            false => (
-                self.vault_y.to_account_info(),
-                self.user_y.to_account_info(),
-            ),
+        let (from, to, mint) = match is_x {
+            true => (self.vault_x.to_account_info(), self.user_x.to_account_info(), &self.mint_x),
+            false => (self.vault_y.to_account_info(), self.user_y.to_account_info(), &self.mint_y),
         };
 
-        transfer(
+        transfer_checked(
             CpiContext::new_with_signer(
                 self.token_program.key(),
-                Transfer {
+                TransferChecked {
                     from,
                     to,
                     authority: self.config.to_account_info(),
+                    mint: mint.to_account_info(),
                 },
                 &[&[
                     b"config",
@@ -135,6 +128,7 @@ impl<'info> Withdraw<'info> {
                 ]],
             ),
             amount,
+            mint.decimals,
         )
     }
 
