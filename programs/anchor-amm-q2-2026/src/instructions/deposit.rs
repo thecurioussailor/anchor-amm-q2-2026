@@ -1,9 +1,10 @@
 use anchor_lang::prelude::*;
 
 use anchor_spl::{
-    associated_token::AssociatedToken, 
-    token::{Mint, MintTo, Token, TokenAccount, Transfer, mint_to, transfer}
+    associated_token::AssociatedToken,
+    token_interface::{Mint, TokenAccount, TokenInterface, transfer_checked, mint_to, TransferChecked, MintTo},
 };
+
 use constant_product_curve::ConstantProduct;
 
 use crate::{state::Config, error::AmmError};
@@ -13,15 +14,15 @@ pub struct Deposit<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
-    pub mint_x: Account<'info, Mint>,
-    pub mint_y: Account<'info, Mint>,
+    pub mint_x: InterfaceAccount<'info, Mint>,
+    pub mint_y: InterfaceAccount<'info, Mint>,
 
     #[account(
         mut,
         seeds = [b"lp", config.key().as_ref()],
         bump = config.lp_bump
     )]
-    pub mint_lp: Account<'info, Mint>,
+    pub mint_lp: InterfaceAccount<'info, Mint>,
     
     #[account(
         has_one = mint_x,
@@ -36,28 +37,28 @@ pub struct Deposit<'info> {
         associated_token::mint = mint_x,
         associated_token::authority = config,
     )]
-    pub vault_x: Account<'info, TokenAccount>,
+    pub vault_x: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         mut, 
         associated_token::mint = mint_y,
         associated_token::authority = config
     )]
-    pub vault_y: Account<'info, TokenAccount>,
+    pub vault_y: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         mut,
         associated_token::mint = mint_x,
         associated_token::authority = user,
     )]
-    pub user_x: Account<'info, TokenAccount>,
+    pub user_x: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         mut,
-        associated_token::mint = mint_x,
-        associated_token::authority = mint_y,
+        associated_token::mint = mint_y,
+        associated_token::authority = user,
     )]
-    pub user_y: Account<'info, TokenAccount>,
+    pub user_y: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         init_if_needed,
@@ -65,9 +66,9 @@ pub struct Deposit<'info> {
         associated_token::mint = mint_lp,
         associated_token::authority = user,
     )]
-    pub user_lp: Account<'info, TokenAccount>,
+    pub user_lp: InterfaceAccount<'info, TokenAccount>,
 
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
 
     pub associated_token_program: Program<'info, AssociatedToken>,
 
@@ -96,7 +97,7 @@ impl<'info> Deposit<'info> {
                     amount, 
                     6
                 )
-                .unwrap();
+                .map_err(|_| AmmError::InvalidAmount)?;
 
                 require!(
                     amounts.x <= max_x && amounts.y <= max_y,
@@ -125,15 +126,18 @@ impl<'info> Deposit<'info> {
 
         let cpi_program = self.token_program.key();
 
-        let cpi_accounts = Transfer {
+        let mint = if is_x { &self.mint_x } else { &self.mint_y };
+
+        let cpi_accounts = TransferChecked {
             from,
             to,
             authority: self.user.to_account_info(),
+            mint: mint.to_account_info(),
         };
 
         let ctx = CpiContext::new(cpi_program, cpi_accounts);
 
-        transfer(ctx, amount)
+        transfer_checked(ctx, amount, mint.decimals)
     }
 
     pub fn mint_lp_tokens(&self, amount: u64) -> Result<()> {
