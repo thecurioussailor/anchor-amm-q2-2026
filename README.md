@@ -84,6 +84,8 @@ test test_withdraw   ... ok
 test test_swap       ... ok
 ```
 
+![Tests Passing](screenshot-tests.png)
+
 ### Run tests
 
 ```bash
