@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token::{transfer, Mint, Token, TokenAccount, Transfer},
+    token_interface::{Mint, TokenAccount, TokenInterface, transfer_checked, TransferChecked},
 };
 use constant_product_curve::{ConstantProduct, LiquidityPair};
 
@@ -11,10 +11,10 @@ use crate::{error::AmmError, state::Config};
 pub struct Swap<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
-    
-    pub mint_x: Box<Account<'info, Mint>>,
-    
-    pub mint_y: Box<Account<'info, Mint>>,
+
+    pub mint_x: Box<InterfaceAccount<'info, Mint>>,
+
+    pub mint_y: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         has_one = mint_x,
@@ -25,41 +25,40 @@ pub struct Swap<'info> {
     pub config: Account<'info, Config>,
 
     #[account(
-        mut,
         seeds = [b"lp", config.key().as_ref()],
         bump = config.lp_bump,
     )]
-    pub mint_lp: Box<Account<'info, Mint>>,
+    pub mint_lp: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
         associated_token::mint = mint_x,
         associated_token::authority = config,
     )]
-    pub vault_x: Box<Account<'info, TokenAccount>>,
+    pub vault_x: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         associated_token::mint = mint_y,
         associated_token::authority = config,
     )]
-    pub vault_y: Box<Account<'info, TokenAccount>>,
+    pub vault_y: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         associated_token::mint = mint_x,
         associated_token::authority = user,
     )]
-    pub user_x: Box<Account<'info, TokenAccount>>,
+    pub user_x: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         associated_token::mint = mint_y,
         associated_token::authority = user,
     )]
-    pub user_y: Box<Account<'info, TokenAccount>>,
- 
-    pub token_program: Program<'info, Token>,
+    pub user_y: Box<InterfaceAccount<'info, TokenAccount>>,
+
+    pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
     pub associated_token_program: Program<'info, AssociatedToken>,
 }
@@ -74,7 +73,7 @@ impl<'info> Swap<'info> {
             self.config.fee,
             Some(6),
         )
-        .unwrap();
+        .map_err(|_| AmmError::InvalidAmount)?;
 
         let p = match is_x {
             true => LiquidityPair::X,
@@ -90,49 +89,40 @@ impl<'info> Swap<'info> {
     }
 
     pub fn deposit_tokens(&mut self, is_x: bool, amount: u64) -> Result<()> {
-        let (from, to) = match is_x {
-            true => (
-                self.user_x.to_account_info(),
-                self.vault_x.to_account_info(),
-            ),
-            false => (
-                self.user_y.to_account_info(),
-                self.vault_y.to_account_info(),
-            ),
+        let (from, to, mint) = match is_x {
+            true => (self.user_x.to_account_info(), self.vault_x.to_account_info(), &self.mint_x),
+            false => (self.user_y.to_account_info(), self.vault_y.to_account_info(), &self.mint_y),
         };
 
-        transfer(
+        transfer_checked(
             CpiContext::new(
                 self.token_program.key(),
-                Transfer {
+                TransferChecked {
                     from,
                     to,
                     authority: self.user.to_account_info(),
+                    mint: mint.to_account_info(),
                 },
             ),
             amount,
+            mint.decimals,
         )
     }
 
     pub fn withdraw_tokens(&mut self, is_x: bool, amount: u64) -> Result<()> {
-        let (from, to) = match is_x {
-            true => (
-                self.vault_y.to_account_info(),
-                self.user_y.to_account_info(),
-            ),
-            false => (
-                self.vault_x.to_account_info(),
-                self.user_x.to_account_info(),
-            ),
+        let (from, to, mint) = match is_x {
+            true => (self.vault_x.to_account_info(), self.user_x.to_account_info(), &self.mint_x),
+            false => (self.vault_y.to_account_info(), self.user_y.to_account_info(), &self.mint_y),
         };
 
-        transfer(
+        transfer_checked(
             CpiContext::new_with_signer(
                 self.token_program.key(),
-                Transfer {
+                TransferChecked {
                     from,
                     to,
                     authority: self.config.to_account_info(),
+                    mint: mint.to_account_info(),
                 },
                 &[&[
                     b"config",
@@ -141,6 +131,7 @@ impl<'info> Swap<'info> {
                 ]],
             ),
             amount,
+            mint.decimals,
         )
     }
 }
